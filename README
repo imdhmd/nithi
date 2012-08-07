@@ -1,1 +1,4 @@
 An attempt to create a framework that can device multiple kinds of html UI components based upon the attributes of a json object
+
+TODO:
+Need to merge data-grid v1 and v2
