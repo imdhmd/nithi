@@ -1,8 +1,73 @@
 /******
 * Version 1.0
 * This contains three objects: DataGrid, Pagination and GoToPage
-* 
+*
 */
+
+/**
+ * Sample json
+ * ~~~~~~~~~~~
+ * var singleDataElementJson = {
+ *      'header' : {
+ *          'id'            : 'SSN no.',
+ *          'name'          : 'Name of Guy',
+ *          'occupation'    : 'Occupation what?'
+ *      },
+ *      'content': [
+ *          {
+ *              'id'        : 23,
+ *              'name'      : 'billoo',
+ *              'occupation': 'Politician'
+ *          },
+ *          {
+ *              'id'        : 24,
+ *              'name'      : 'sorabji'
+ *              'occupation': 'Coder'
+ *          }
+ *      ],
+ *      'count': 2
+ * };
+ *
+ * var multipleDataElementJson = {
+ *      'personJobDetails': {
+ *          'header' : {
+ *              'id'            : 'SSN no.',
+ *              'name'          : 'Name of Guy',
+ *              'occupation'    : 'Occupation what?'
+ *          },
+ *          'content': [
+ *              {
+ *                  'id'        : 23,
+ *                  'name'      : 'billoo',
+ *                  'occupation': 'Politician'
+ *              },
+ *              {
+ *                  'id'        : 24,
+ *                  'name'      : 'sorabji'
+ *                  'occupation': 'Coder'
+ *              }
+ *          ],
+ *          'count': 2
+ *      },
+ *      'occupationHazardDetails' : {
+ *          'header' : {
+ *              'occupation'    : 'Occupation',
+ *              'hazard'        : 'Occupational hazard'
+ *          },
+ *          'content' : [
+ *              {
+ *                  'occupation': 'Politician',
+ *                  'hazard'    : 'Corruption'
+ *              },
+ *              {
+ *                  'occupation': 'Coder',
+ *                  'hazard'    : 'Backache'
+ *              }
+ *          ]
+ *      }
+ * };
+ *
+ */
 
 DataGrid = function(params){
     var rows;
@@ -12,30 +77,49 @@ DataGrid = function(params){
     var to;
     var count;
     var contentKeys;
-
     this.init = function(params){
         this.tableId = params['tableId'];
         this.rows = params['rows'];
         this.dataUrl = params['dataUrl'];
+        this.root = params['root'];
+        this.data = params['data'];
         this.from = 0;
         this.to = this.from + this.rows;
 
-        var dataGrid = this;
-        $.ajax({
-            url: this.dataUrl,
-            data: 'from='+this.from+'&to='+this.to+'&header'+'&count',
-            dataType: 'json',
-            error: function(){
-                dataGrid.handleError("An error has occurred, please try again.")
-            }
-        }).done(function(data){
-            dataGrid.count = data.count;
-            dataGrid.extractContentKeys(data.header);
-            dataGrid.loadHeader(data.header);
-            dataGrid.loadContent(data.content);
+        if(this.dataUrl) {
+            var dataGrid = this;
+            $.ajax({
+                url: this.dataUrl,
+                data: 'from='+this.from+'&to='+this.to+'&header'+'&count',
+                dataType: 'json',
+                error: function(){
+                    dataGrid.handleError("An error has occurred, please try again.")
+                }
+            }).done(function(data){
+                dataGrid.initWithData(data);
+            });
+        } else if(this.data) {
+            this.initWithData(this.data);
+        }
+    }
 
-             var numPages = Math.ceil(dataGrid.count / dataGrid.rows);
-             var pagination = new Pagination({
+    this.initWithData = function(data) {
+        var dataGrid = this;
+        data = dataGrid.fromRoot(data);
+
+        dataGrid.count = data.count;
+        dataGrid.extractContentKeys(data.header);
+        dataGrid.loadHeader(data.header);
+        dataGrid.loadContent(data.content);
+
+        var numPages = Math.ceil(dataGrid.count / dataGrid.rows);
+
+        if(numPages == 0){
+            $('#' + dataGrid.tableId + '_pagination').find('.pagination').remove();
+            $('#' + dataGrid.tableId + '_go_to_page').find('.form-search').remove();
+        }
+        if(numPages > 0){
+            dataGrid.pagination = new Pagination({
                 "numPages" : numPages,
                 "showNumPages" : 4,
                 "where" : $('#' + dataGrid.tableId + '_pagination'),
@@ -50,11 +134,23 @@ DataGrid = function(params){
                     "where" : $('#' + dataGrid.tableId + '_go_to_page'),
                     "click" : function(pageNum){
                         dataGrid.next(pageNum);
-                        pagination.refresh(pageNum);
                     }
                 });
             }
-        });
+        }
+    }
+
+    this.fromRoot = function(data){
+        if(this.root == undefined) {
+            return data;
+        }
+
+        var keysArray = this.root.split(".")
+        for(var i in keysArray) {
+            data = data[keysArray[i]];
+        }
+
+        return data;
     }
 
     this.extractContentKeys = function(header){
@@ -83,6 +179,7 @@ DataGrid = function(params){
         if(contents.length == 0){
             $('#'+id+' tbody:last').append('<tr><td class="alert alert-info" colspan='+this.contentKeys.length+' style="text-align:center">No Results Found!</td></tr>');
         }
+
     }
 
     this.buildTableContentRow = function(content){
@@ -99,7 +196,7 @@ DataGrid = function(params){
         var contentKeys = this.contentKeys;
         var newRow = $('<tr></tr>');
         for(var i in contentKeys){
-            newRow.append('<th>'+header[contentKeys[i]]+'</th>');
+            newRow.append('<th header-key="'+contentKeys[i]+'">'+header[contentKeys[i]]+'</th>');
         }
 
         return newRow;
@@ -120,7 +217,10 @@ DataGrid = function(params){
                 dataGrid.handleError("An error has occurred, please try again.")
             }
         }).done(function(data){
+            data = dataGrid.fromRoot(data);
+
             dataGrid.loadContent(data.content);
+            dataGrid.pagination.refresh(page);
         });
     }
 
@@ -128,6 +228,14 @@ DataGrid = function(params){
         var errorEle = $('<div>'+msg+'</div>').addClass('alert alert-error');
         errorEle.append($('<a>x</a>').addClass('close').attr('data-dismiss','alert'));
         $('#'+this.tableId + '_error').append(errorEle);
+    }
+
+    this.updateParams = function(params){
+        for(var key in params){
+            if(params.hasOwnProperty(key) && this.hasOwnProperty(key)){
+                this[key] = params[key];
+            }
+        }
     }
 
     this.init(params);
@@ -153,7 +261,6 @@ Pagination = function(params) {
             if(!a.parent('li').hasClass('active') && !a.parent('li').hasClass('disabled')) {
                 var pageNum = parseInt(a.attr('page'));
                 params.click(pageNum);
-                pagination.refresh(pageNum);
             }
         });
     }
@@ -240,7 +347,7 @@ Pagination = function(params) {
 GoToPage = function(params){
     this.init = function(params){
         var goToPageForm = $('<form class="well-normal form-search">' +
-                '                   <input class="search-query input-mini" type="text" placeholder="'+1+' .. '+params.numPages+'">' +
+                '                   <input class="search-query input-small" type="text" placeholder="'+1+' .. '+params.numPages+'">' +
                 '                   <button class="btn" type="submit">Go</button>' +
                 '               </form>');
 
