@@ -100,8 +100,9 @@ DataGrid = function(params){
     this.initWithData = function(data) {
         var dataGrid = this;
         data = dataGrid.fromRoot(data);
+        dataGrid.data = data;
 
-        dataGrid.count = data.count;
+        dataGrid.count = data.count == undefined ? data.content.length : data.count;
         dataGrid.extractContentKeys(data.header);
         dataGrid.loadHeader(data.header);
         dataGrid.loadContent(data.content);
@@ -215,8 +216,8 @@ DataGrid = function(params){
                 dataGrid.pagination.refresh(page);
             });
         } else if (this.data) {
-            dataGrid.loadContent(data.content);
-            dataGrid.pagination.refresh(page);
+            this.loadContent(this.data.content);
+            this.pagination.refresh(page);
         }
     }
 
